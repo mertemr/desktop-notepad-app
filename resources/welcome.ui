@@ -16,6 +16,10 @@
   <property name="windowTitle">
    <string>Notes App</string>
   </property>
+  <property name="windowIcon">
+   <iconset>
+    <normaloff>icon.ico</normaloff>icon.ico</iconset>
+  </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <property name="spacing">
     <number>7</number>
@@ -64,7 +68,7 @@
           </size>
          </property>
          <property name="pixmap">
-          <pixmap>C:/Users/Mert/Desktop/notes-icon.png</pixmap>
+          <pixmap>icon-512x.png</pixmap>
          </property>
          <property name="scaledContents">
           <bool>true</bool>
