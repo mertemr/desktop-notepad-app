@@ -1,4 +1,7 @@
+import base64
 import hashlib
+import random
+import string
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -6,17 +9,24 @@ import orjson
 from PyQt6 import QtWidgets
 from PyQt6.uic.load_ui import loadUi
 
-from msgbox import MessageBox, MB_ICONERROR, MB_OK
 from dialogPassword import DialogPassword
+from msgbox import MB_ICONERROR, MB_OK, MessageBox
 from notewindow import NoteWindow
 
 RECENTS_FILE = Path("recents.json").absolute()
 RECENTS: List[str] = orjson.loads(RECENTS_FILE.read_bytes()) if RECENTS_FILE.exists() else []
 
-DATA = {
-    "notes": {},
-    "password": "",
-}
+rot13trans = str.maketrans('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', 
+   'D5FmrqHugjwM0vkbiWNSVAYx9l4KQaLdPyB1e28ZRzto7GTnUJ3pO6ChcXEfsI')
+
+rot13transD = str.maketrans('D5FmrqHugjwM0vkbiWNSVAYx9l4KQaLdPyB1e28ZRzto7GTnUJ3pO6ChcXEfsI',
+    'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789')
+
+def rot13(s: str) -> str:
+    return s.translate(rot13trans)
+
+def rot13decrypt(s: str) -> str:
+    return s.translate(rot13transD)
 
 def hash_password(password: str) -> bytes:
     return hashlib.sha256(password.encode()).digest()
@@ -26,6 +36,12 @@ class WelcomeWindow(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
         loadUi(str(self.UI), self)
+        
+        self._file = None
+        self._data = {
+            "notes": {},
+            "password": "",
+        }
         
         self.init()
         self.show()
@@ -84,17 +100,38 @@ class WelcomeWindow(QtWidgets.QWidget):
         if not self.repo_password:
             return MessageBox("Error", "Depoya bir şifre belirleyin.", MB_ICONERROR | MB_OK).show()
         
-        DATA["password"] = hash_password(self.repo_password).hex()
+        self._data["password"] = hash_password(self.repo_password).hex()
+        
+        characters = string.ascii_letters + string.digits + string.punctuation + ' '
+        random_data = ''.join(random.choices(characters, k=128))
+        
+        self._data["bloat_data"] = random_data
         
         f = Path(file).absolute()
         f.touch(exist_ok=True)
+        self._file = f
         
         if f.name not in RECENTS:
             self.recent_repos.addItem(str(f))
-        self.update_recents()
-        f.write_bytes(orjson.dumps(DATA))
-        self.open_notes(DATA, repo_file=f)
-
+        
+        self.write_file(f, self._data)
+        
+        self.update_recents()    
+        self.open_notes(self._data, repo_file=f)
+        
+    def write_file(self, file: str, data: Dict[str, Any]) -> None:
+        databyte = orjson.dumps(data)
+        b64 = base64.b64encode(databyte)
+        r13 = rot13(b64.decode())
+        Path(file).write_bytes(r13.encode())
+        
+    def read_file(self, file: str) -> Dict[str, Any]:
+        data = Path(file).read_bytes().decode()
+        r13 = rot13decrypt(data)
+        b64 = base64.b64decode(r13)
+        return orjson.loads(b64)
+        
+        
     def open_repo(self, item: Optional[QtWidgets.QListWidgetItem] = None):
         if item:
             select_file = item.text()
@@ -113,10 +150,10 @@ class WelcomeWindow(QtWidgets.QWidget):
         if not self.repo_password:
             return
 
-        data = orjson.loads(Path(select_file).read_bytes())
+        data = self.read_file(select_file)
         hash = hash_password(self.repo_password).hex()
         
-        print(data)
+        self._file = select_file
         
         if hash != data["password"]:
             del data
@@ -132,9 +169,8 @@ class WelcomeWindow(QtWidgets.QWidget):
         self.unlock_notes()
         
     def update_notes(self, data: Dict[str, Any]):
-        print(DATA)
-        DATA["notes"] = data
-        Path(self.gui_note._file).write_bytes(orjson.dumps(DATA))
+        self._data["notes"] = data
+        self.write_file(self._file, self._data)
         
     def unlock_notes(self):
         self.raisewindow(self.gui_note)
